@@ -1,95 +1,60 @@
-name: Check dependencies
-
-on:
-  schedule:
-    - cron: "0 0 * * *"
-
 jobs:
   check_asm:
     name: Check ASM
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Check for dependency updates
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          arguments: checkDependencyUpdates -DoutputFormatter=plain,json
-      - name: Create issue/comment if ASM is not up-to-date
-        uses: actions/github-script@v7
-        env:
-          GITHUB_SERVER_URL: ${{github.server_url}}
-          GITHUB_REPOSITORY: ${{github.repository}}
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const { GITHUB_SERVER_URL, GITHUB_REPOSITORY } = process.env
-
-            class AsmOutdatedMarkdown {
-              constructor(asmDependency) {
-                  this.updateDescription = `\`${asmDependency.group}:${asmDependency.name}\` can be updated from version \`${asmDependency.version}\` to \`${asmDependency.available.milestone}\``;
-              }
-
-              toString() {
-                const runDescription = this._createGitHubLink(context.workflow, "actions/runs/${{github.run_id}}");
-                const commitDescription = this._createGitHubLink(context.sha.substr(0, 7), "commit/" + context.sha);
-
-                return `${runDescription} found that ${this.updateDescription} at ${commitDescription}.\n` +
-                         this._createMarkdownDetails("dependency updates report", "```\n" + this._readDependenciesReportPlainText() + "\n```");
-              }
-
-              _createGitHubLink(text, path) {
-                  return `[${text}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/${path})`;
-              }
-
-              _createMarkdownDetails(summary, body) {
-                return `<details><summary>${summary}</summary>\n\n${body}\n</details>`;
-              }
-
-              _readDependenciesReportPlainText() {
-                return require("fs").readFileSync("./build/dependencyUpdates/report.txt", "utf8").trim();
-              }
-            }
-
-            class GitHubAsmOutdatedIssue {
-              static title = "ASM is not up-to-date";
-              static logHtmlUrl = response => core.info(response.data.html_url);
-
-              constructor(issue) {
-                this.issue = issue;
-              }
-
-              static createNew(title, body) {
-                core.info(`Creating issue "${title}"...`);
-                github.rest.issues.create({ owner, repo, title, body }).then(GitHubAsmOutdatedIssue.logHtmlUrl);
-              }
-
-              addComment(body) {
-                core.info(`Creating comment on ${this.issue.html_url} "${this.issue.title}"...`);
-                github.rest.issues.createComment({ owner, repo, issue_number: this.issue.number, body }).then(GitHubAsmOutdatedIssue.logHtmlUrl);
-              }
-            }
-
-            class GitHubIssues {
-              static async findIssueWithTitle(title) {
-                const response = await github.rest.search.issuesAndPullRequests({ q: `repo:${owner}/${repo} "${title}" in:title is:open is:issue` });
-                const issues = response.data.items;
-                const matching = Array.from(issues).find(issue => issue.title === title);
-                return matching && new GitHubAsmOutdatedIssue(matching);
-              }
-            }
-
-            const reportJson = require("./build/dependencyUpdates/report.json")
-            const asmDependency = reportJson.outdated.dependencies.find(dependency => dependency.group === "org.ow2.asm");
-            if (asmDependency) {
-              const asmOutdatedMarkdown = new AsmOutdatedMarkdown(asmDependency);
-              core.setFailed(asmOutdatedMarkdown.updateDescription);
-
-              const existingIssue = await GitHubIssues.findIssueWithTitle(GitHubAsmOutdatedIssue.title)
-
-              if (existingIssue) {
-                existingIssue.addComment(asmOutdatedMarkdown.toString())
-              } else {
-                GitHubAsmOutdatedIssue.createNew(GitHubAsmOutdatedIssue.title, asmOutdatedMarkdown.toString())
-              }
-            }
+    - continue-on-error: true
+      name: Checkout
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Check for dependency updates
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        arguments: checkDependencyUpdates -DoutputFormatter=plain,json
+    - continue-on-error: true
+      env:
+        GITHUB_REPOSITORY: ${{github.repository}}
+        GITHUB_SERVER_URL: ${{github.server_url}}
+      name: Create issue/comment if ASM is not up-to-date
+      uses: actions/github-script@v7
+      with:
+        script: "const { owner, repo } = context.repo;\nconst { GITHUB_SERVER_URL,\
+          \ GITHUB_REPOSITORY } = process.env\n\nclass AsmOutdatedMarkdown {\n  constructor(asmDependency)\
+          \ {\n      this.updateDescription = `\\`${asmDependency.group}:${asmDependency.name}\\\
+          ` can be updated from version \\`${asmDependency.version}\\` to \\`${asmDependency.available.milestone}\\\
+          ``;\n  }\n\n  toString() {\n    const runDescription = this._createGitHubLink(context.workflow,\
+          \ \"actions/runs/${{github.run_id}}\");\n    const commitDescription = this._createGitHubLink(context.sha.substr(0,\
+          \ 7), \"commit/\" + context.sha);\n\n    return `${runDescription} found\
+          \ that ${this.updateDescription} at ${commitDescription}.\\n` +\n      \
+          \       this._createMarkdownDetails(\"dependency updates report\", \"```\\\
+          n\" + this._readDependenciesReportPlainText() + \"\\n```\");\n  }\n\n  _createGitHubLink(text,\
+          \ path) {\n      return `[${text}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/${path})`;\n\
+          \  }\n\n  _createMarkdownDetails(summary, body) {\n    return `<details><summary>${summary}</summary>\\\
+          n\\n${body}\\n</details>`;\n  }\n\n  _readDependenciesReportPlainText()\
+          \ {\n    return require(\"fs\").readFileSync(\"./build/dependencyUpdates/report.txt\"\
+          , \"utf8\").trim();\n  }\n}\n\nclass GitHubAsmOutdatedIssue {\n  static\
+          \ title = \"ASM is not up-to-date\";\n  static logHtmlUrl = response =>\
+          \ core.info(response.data.html_url);\n\n  constructor(issue) {\n    this.issue\
+          \ = issue;\n  }\n\n  static createNew(title, body) {\n    core.info(`Creating\
+          \ issue \"${title}\"...`);\n    github.rest.issues.create({ owner, repo,\
+          \ title, body }).then(GitHubAsmOutdatedIssue.logHtmlUrl);\n  }\n\n  addComment(body)\
+          \ {\n    core.info(`Creating comment on ${this.issue.html_url} \"${this.issue.title}\"\
+          ...`);\n    github.rest.issues.createComment({ owner, repo, issue_number:\
+          \ this.issue.number, body }).then(GitHubAsmOutdatedIssue.logHtmlUrl);\n\
+          \  }\n}\n\nclass GitHubIssues {\n  static async findIssueWithTitle(title)\
+          \ {\n    const response = await github.rest.search.issuesAndPullRequests({\
+          \ q: `repo:${owner}/${repo} \"${title}\" in:title is:open is:issue` });\n\
+          \    const issues = response.data.items;\n    const matching = Array.from(issues).find(issue\
+          \ => issue.title === title);\n    return matching && new GitHubAsmOutdatedIssue(matching);\n\
+          \  }\n}\n\nconst reportJson = require(\"./build/dependencyUpdates/report.json\"\
+          )\nconst asmDependency = reportJson.outdated.dependencies.find(dependency\
+          \ => dependency.group === \"org.ow2.asm\");\nif (asmDependency) {\n  const\
+          \ asmOutdatedMarkdown = new AsmOutdatedMarkdown(asmDependency);\n  core.setFailed(asmOutdatedMarkdown.updateDescription);\n\
+          \n  const existingIssue = await GitHubIssues.findIssueWithTitle(GitHubAsmOutdatedIssue.title)\n\
+          \n  if (existingIssue) {\n    existingIssue.addComment(asmOutdatedMarkdown.toString())\n\
+          \  } else {\n    GitHubAsmOutdatedIssue.createNew(GitHubAsmOutdatedIssue.title,\
+          \ asmOutdatedMarkdown.toString())\n  }\n}"
+name: Check dependencies
+on:
+  repository_dispatch:
+    types: trigger-ga___check-dependencies.yml
